@@ -1,1 +1,15 @@
+# General follower parameters
+control_timer_rate: 10.0 # Hz
+desired_offset_local: [-5.0, 0.0, 0.0] # x, y, z offset from the leader in its frame
 
+# Parameters for predictive trajectory generation
+prediction_horizon: 2.0 # seconds - how far into the future to predict
+trajectory_points: 10 # number of points in the generated trajectory
+
+# Kalman filter parameters for the leader tracker
+# These values are often tuned by experimentation.
+# process_noise: controls how much we trust the constant velocity model.
+# measurement_noise: controls how much we trust the incoming UVDAR sensor data.
+kalman:
+  process_noise: 0.1
+  measurement_noise: 0.5
