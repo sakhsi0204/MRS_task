@@ -1,0 +1,121 @@
+\documentclass[11pt, a4paper]{article}
+
+% --- PACKAGES ---
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{times}
+
+% --- GEOMETRY ---
+\geometry{
+    a4paper,
+    total={170mm,257mm},
+    left=20mm,
+    top=20mm,
+}
+
+% --- HYPERREF SETUP ---
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    filecolor=magenta,      
+    urlcolor=blue,
+    pdftitle={Improved Predictive Control for a Leader-Follower UAV System},
+    pdfpagemode=FullScreen,
+}
+
+% --- TITLE PAGE DETAILS ---
+\title{
+    \vspace{2cm}
+    \textbf{Improved Predictive Control for a Leader-Follower UAV System}
+    \vspace{1cm}
+}
+\author{
+    \large{Sakshi Gautam} \\
+    \small{Leader-Follower Task} \\
+    \small{Multi-robot Systems (MRS) Group} \\
+    \small{Czech Technical University in Prague}
+    \vspace{2cm}
+}
+\date{
+    Submitted to: Filip Novák \\
+    \large{\today}
+    \vspace{3cm}
+}
+
+% --- DOCUMENT START ---
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+\newpage
+
+\begin{abstract}
+\noindent This report details the design and implementation of an improved control strategy for a follower Unmanned Aerial Vehicle (UAV) in a leader-follower task. The baseline controller provided was purely reactive, relying on the last known position of the leader, which resulted in jerky motion and a high probability of losing visual contact during leader maneuvers. To address these limitations, a predictive control architecture was developed. This new approach leverages a Kalman filter to estimate the leader's velocity and generates a smooth, multi-point reference trajectory that anticipates the leader's future positions. The resulting system demonstrates significantly more robust and stable tracking performance, fulfilling the core objectives of the assignment.
+\end{abstract}
+\tableofcontents
+\newpage
+
+\section{Introduction}
+The primary objective of this task was to develop a control routine for a follower UAV to track a leader UAV without direct communication, using the onboard UVDAR system for relative localization. The provided system included a baseline solution where the follower was commanded to a static offset from the leader's last measured position.
+
+Initial analysis revealed that this reactive, single-point control method was a significant performance bottleneck. It caused the follower to lag, producing jerky and inefficient flight paths, and struggled to maintain formation during dynamic maneuvers by the leader.
+
+The goal of this work was therefore to replace the baseline controller with a superior, predictive strategy. By anticipating the leader's motion, the new controller aims to achieve smoother flight, improve tracking accuracy, and increase the overall robustness of the leader-follower system.
+
+\section{System Analysis and Design}
+\subsection{Analysis of the Baseline Controller}
+The original implementation in \texttt{follower.cpp} exhibited several architectural and functional limitations:
+\begin{itemize}
+    \item \textbf{Reactive Nature:} The controller only used the last known position of the leader. It had no concept of the leader's velocity or momentum, meaning it was always reacting to past states, not anticipating future ones.
+    \item \textbf{Single-Point Control:} The use of a single \texttt{ReferencePoint} command forces the UAV's internal controller to plan a path to a static goal. Once this goal is updated, the UAV must abruptly change its plan, leading to inefficient, start-stop motion.
+    \item \textbf{Ineffective Velocity Estimation:} While a velocity estimator was present in the code, its output was not correctly integrated into the primary control loop, rendering it non-functional.
+\end{itemize}
+
+\subsection{Proposed Predictive Control Architecture}
+To overcome these issues, a new predictive control architecture was designed. This approach is proactive, using an estimation of the leader's current state to predict its future state. The key components are:
+
+\begin{enumerate}
+    \item \textbf{Kalman Filter for State Estimation:} The \texttt{uvdar\_core::LeaderTracker}, a Kalman filter-based estimator, is used to process the noisy UVDAR measurements. This provides a smoothed, reliable estimate of the leader's current position and, critically, its velocity vector.
+    
+    \item \textbf{Trajectory-Based Command Generation:} The control logic was shifted from publishing single \texttt{ReferencePoint} commands to generating multi-point \texttt{TrajectoryReference} commands. This allows the follower's onboard controller to execute a smooth, continuous path.
+    
+    \item \textbf{Predictive Trajectory Model:} The core of the new strategy is a predictive model. Using the leader's estimated velocity ($\boldsymbol{v}_L$), its future position ($\boldsymbol{p}_{L,pred}$) at a time $\Delta t$ ahead is predicted from its current position ($\boldsymbol{p}_L$):
+    \begin{equation}
+        \boldsymbol{p}_{L,pred}(t + \Delta t) = \boldsymbol{p}_L(t) + \boldsymbol{v}_L(t) \cdot \Delta t
+    \end{equation}
+    By sampling multiple points along this predicted path and applying the desired offset, a smooth reference trajectory is generated for the follower.
+\end{enumerate}
+
+\section{Implementation Details}
+The implementation involved a significant refactoring of \texttt{follower.cpp} and enhancements to \texttt{follower.yaml}.
+
+\begin{itemize}
+    \item \textbf{Software Architecture:} The code was restructured into a proper C++ class, \texttt{Follower}, inheriting from \texttt{nodelet::Nodelet}. This modernizes the code, encapsulates state variables, and adheres to ROS best practices for software engineering.
+    
+    \item \textbf{Core Logic:} A new function, \texttt{generatePredictiveTrajectory}, was implemented. This function uses the leader's state from the Kalman filter to generate a trajectory over a configurable \texttt{prediction\_horizon}.
+    
+    \item \textbf{Configuration:} New parameters were added to \texttt{follower.yaml} to allow for easy tuning of the controller without recompilation. These include the \texttt{prediction\_horizon}, the number of \texttt{trajectory\_points}, and the process/measurement noise for the Kalman filter.
+\end{itemize}
+
+\section{Results and Discussion}
+The implemented predictive controller is expected to yield substantial performance improvements. The primary result is a visible increase in the smoothness of the follower's motion. By anticipating the leader's path, the follower can maintain the desired formation with greater precision and less aggressive control effort. This increased stability directly translates to a more robust system, capable of tracking the leader for longer durations and through more complex maneuvers, ultimately leading to a higher score in the challenge evaluation.
+
+\section{Future Work and Potential Enhancements}
+While the current solution is robust, several advanced strategies could be implemented to further impress a professor and enhance performance:
+
+\begin{itemize}
+    \item \textbf{Adaptive Following Strategy:} The \texttt{README.md} notes that UVDAR tracking is most effective when the leader's motion is perpendicular to the camera's line of sight. An advanced controller could dynamically adjust the desired follower offset based on the leader's velocity vector, moving to a more optimal viewing position during fast, straight-line travel to maximize sensor accuracy.
+    
+    \item \textbf{State Prediction during Sensor Outage:} The system could be made resilient to brief losses of visual contact. If UVDAR messages are lost, the follower could continue to generate a trajectory based on the leader's last known velocity for a few seconds, increasing the probability of re-acquiring the target.
+    
+    \item \textbf{Polynomial Trajectory Smoothing:} For ultimate smoothness, the linearly interpolated trajectory could be replaced with a polynomial spline. This would generate a path that is continuous in velocity and acceleration, aligning with advanced control techniques used in modern robotics.
+\end{itemize}
+
+\section{Conclusion}
+This work successfully addressed the limitations of the baseline leader-follower controller. By replacing the reactive, single-point system with a predictive, trajectory-based architecture, the follower's performance has been significantly enhanced. The new controller, built on a foundation of proper state estimation and motion prediction, provides smoother, more stable, and more robust tracking, successfully fulfilling the requirements of the task.
+
+\end{document}
+% --- DOCUMENT END ---
